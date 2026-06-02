@@ -12,3 +12,6 @@ web-build/
 coverage/
 ios/
 android/
+
+# Vercel
+.vercel/
