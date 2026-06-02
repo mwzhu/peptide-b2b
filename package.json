@@ -1,0 +1,20 @@
+{
+  "name": "beacon",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Beacon — peptide tracking platform for medspas and health clinics",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "web": "pnpm --filter @beacon/web dev",
+    "mobile": "pnpm --filter @beacon/mobile start",
+    "landing": "pnpm --filter @beacon/marketing dev",
+    "test": "pnpm --filter @beacon/calculations test",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "prettier": "^3.3.3",
+    "typescript": "^5.6.3"
+  }
+}

@@ -1,0 +1,30 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+  body {
+    margin: 0;
+    background-color: theme('colors.canvas');
+    color: theme('colors.ink.DEFAULT');
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  ::selection {
+    background-color: theme('colors.primary.soft');
+  }
+}
+
+@layer utilities {
+  .grain {
+    background-image: radial-gradient(rgba(58, 47, 28, 0.05) 1px, transparent 1px);
+    background-size: 14px 14px;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+}
