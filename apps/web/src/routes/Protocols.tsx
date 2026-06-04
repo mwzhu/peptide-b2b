@@ -6,34 +6,31 @@ import { Badge, Button, Card, Loading, PageHeader, Select } from '../components/
 import { useProducts, useProtocolTemplates } from '../lib/hooks';
 
 const CATEGORY_TONE = {
-  glp1: 'brand',
-  healing: 'success',
-  growth_hormone: 'info',
+  weight_loss: 'brand',
+  recovery: 'success',
+  aesthetics: 'warning',
   longevity: 'accent',
-  sexual_health: 'warning',
-  cosmetic: 'neutral',
-  immune: 'info',
+  muscle: 'info',
+  cognitive: 'neutral',
 } as const;
 
 const CATEGORY_LABEL: Record<PeptideCategory, string> = {
-  glp1: 'GLP-1',
-  healing: 'Healing',
-  growth_hormone: 'Growth Hormone',
+  weight_loss: 'Weight Loss',
+  recovery: 'Recovery',
+  aesthetics: 'Aesthetics',
   longevity: 'Longevity',
-  sexual_health: 'Sexual Health',
-  cosmetic: 'Cosmetic',
-  immune: 'Immune',
+  muscle: 'Muscle',
+  cognitive: 'Cognitive',
 };
 
 /** Display order for the category filter chips. */
 const CATEGORY_ORDER: PeptideCategory[] = [
-  'glp1',
-  'healing',
-  'growth_hormone',
+  'weight_loss',
+  'recovery',
+  'aesthetics',
   'longevity',
-  'sexual_health',
-  'cosmetic',
-  'immune',
+  'muscle',
+  'cognitive',
 ];
 
 type SortKey = 'popular' | 'name' | 'shortest' | 'longest';

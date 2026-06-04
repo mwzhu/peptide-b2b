@@ -117,13 +117,12 @@ export interface Patient {
 /* ------------------------------------------------------------------ */
 
 export type PeptideCategory =
-  | 'glp1'
-  | 'healing'
-  | 'growth_hormone'
+  | 'weight_loss'
+  | 'recovery'
+  | 'aesthetics'
   | 'longevity'
-  | 'sexual_health'
-  | 'cosmetic'
-  | 'immune';
+  | 'muscle'
+  | 'cognitive';
 
 export interface PeptideProduct {
   id: Id;

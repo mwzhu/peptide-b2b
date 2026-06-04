@@ -44,7 +44,7 @@ export function ProtocolBuilder() {
   // Category and per-item product are controlled so a category change can
   // immediately filter the peptide picker and snap each item to a peptide that
   // matches.
-  const [category, setCategory] = useState<PeptideCategory>('glp1');
+  const [category, setCategory] = useState<PeptideCategory>('weight_loss');
   const [productByItem, setProductByItem] = useState<Record<string, string>>({});
 
   // Initialize state from the loaded template.
@@ -106,13 +106,12 @@ export function ProtocolBuilder() {
                   value={category}
                   onChange={(e) => onCategoryChange(e.target.value as PeptideCategory)}
                 >
-                  <option value="glp1">GLP-1</option>
-                  <option value="healing">Healing</option>
-                  <option value="growth_hormone">Growth hormone</option>
+                  <option value="weight_loss">Weight Loss</option>
+                  <option value="recovery">Recovery</option>
+                  <option value="aesthetics">Aesthetics</option>
                   <option value="longevity">Longevity</option>
-                  <option value="sexual_health">Sexual health</option>
-                  <option value="cosmetic">Cosmetic</option>
-                  <option value="immune">Immune</option>
+                  <option value="muscle">Muscle</option>
+                  <option value="cognitive">Cognitive</option>
                 </Select>
               </Field>
               <Field label="Duration (weeks)">
