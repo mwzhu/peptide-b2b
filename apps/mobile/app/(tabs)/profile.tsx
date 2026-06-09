@@ -8,7 +8,6 @@ import {
   FlaskConical,
   HeartPulse,
   LifeBuoy,
-  LineChart as LineChartIcon,
   LogOut,
   RefreshCw,
   ShieldCheck,
@@ -102,8 +101,6 @@ export default function ProfileScreen() {
       <View>
         <SectionHeader title="Account" />
         <Card padded={false}>
-          <Row icon={<LineChartIcon size={18} color={color.primary} />} label="Progress & photos" onPress={() => router.push('/outcomes')} />
-          <Sep />
           <Row icon={<FileText size={18} color={color.primary} />} label="Labs & documents" onPress={() => router.push('/labs')} />
           <Sep />
           <Row icon={<FlaskConical size={18} color={color.primary} />} label="Reconstitution calculator" onPress={() => router.push('/calculator')} />
