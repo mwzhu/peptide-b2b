@@ -164,7 +164,7 @@ export default function PlanScreen() {
         <SectionHeader title="Trends" />
         <View style={{ gap: 12 }}>
           {outcomes.data
-            .filter((s) => s.kind !== 'energy' && s.kind !== 'sleep')
+            .filter((s) => s.kind !== 'energy' && s.kind !== 'sleep' && s.kind !== 'waist')
             .map((series) => (
               <MetricCard key={series.kind} series={series} width={chartWidth} />
             ))}
