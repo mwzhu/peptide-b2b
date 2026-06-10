@@ -581,6 +581,7 @@ function buildRecord(plan: PatientPlan): void {
     patientId: patient.id,
     name: 'Comprehensive Metabolic Panel',
     status: 'released',
+    source: 'clinic',
     orderedOn: dateFromNow(-plan.currentWeek * 7 - 6),
     resultedOn: dateFromNow(-plan.currentWeek * 7),
     providerComment: 'Within normal limits. Recheck at the 12-week mark.',
@@ -597,6 +598,7 @@ function buildRecord(plan: PatientPlan): void {
       patientId: patient.id,
       name: 'Lipid Panel',
       status: 'resulted',
+      source: 'clinic',
       orderedOn: dateFromNow(-9),
       resultedOn: dateFromNow(-2),
       values: [
@@ -605,6 +607,32 @@ function buildRecord(plan: PatientPlan): void {
         { name: 'HDL', value: 44, unit: 'mg/dL', refLow: 40, refHigh: 100, flag: 'normal' },
       ],
     });
+  }
+  if (patient.id === 'pt_avery') {
+    // One open clinic request (drives the upload checklist) and one outside
+    // upload awaiting review — both ends of the labs loop in the demo.
+    labs.push(
+      {
+        id: `lab_${patient.id}_requested`,
+        patientId: patient.id,
+        name: 'Follow-up Lipid Panel',
+        status: 'ordered',
+        source: 'clinic',
+        orderedOn: dateFromNow(-3),
+        values: [],
+      },
+      {
+        id: `lab_${patient.id}_upload`,
+        patientId: patient.id,
+        name: 'Hormone Panel — Quest (outside order)',
+        status: 'resulted',
+        source: 'patient',
+        orderedOn: dateFromNow(-1),
+        resultedOn: dateFromNow(-1),
+        values: [],
+        attachment: { fileName: 'Quest_Hormone_Panel_May2026.pdf', sizeKb: 418 },
+      },
+    );
   }
 
   // Documents.
@@ -615,6 +643,8 @@ function buildRecord(plan: PatientPlan): void {
       kind: 'consent',
       title: 'Peptide Therapy Treatment Consent',
       createdAt: daysFromNow(-plan.currentWeek * 7 - 5),
+      source: 'clinic',
+      requiresSignature: true,
       signed: true,
       signedAt: daysFromNow(-plan.currentWeek * 7 - 5, 10),
     },
@@ -624,6 +654,8 @@ function buildRecord(plan: PatientPlan): void {
       kind: 'care_plan',
       title: `${template.name} — Care Plan`,
       createdAt: protocol.approvedAt,
+      source: 'clinic',
+      requiresSignature: true,
       signed: false,
     },
     {
@@ -632,6 +664,8 @@ function buildRecord(plan: PatientPlan): void {
       kind: 'consent',
       title: 'Injection Release Form',
       createdAt: daysFromNow(-plan.currentWeek * 7 - 4),
+      source: 'clinic',
+      requiresSignature: true,
       signed: patient.status !== 'onboarding',
       signedAt:
         patient.status !== 'onboarding'
@@ -639,6 +673,19 @@ function buildRecord(plan: PatientPlan): void {
           : undefined,
     },
   );
+  if (patient.id === 'pt_avery') {
+    documents.push({
+      id: `doc_${patient.id}_upload`,
+      patientId: patient.id,
+      kind: 'prescription',
+      title: 'Previous TRT Prescription',
+      createdAt: daysFromNow(-12, 15),
+      source: 'patient',
+      requiresSignature: false,
+      signed: false,
+      attachment: { fileName: 'trt_rx_scan.jpg', sizeKb: 982 },
+    });
+  }
 
   // Appointments.
   appointments.push({

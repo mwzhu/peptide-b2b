@@ -4,7 +4,14 @@
  * through the mock API.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { RefillRequest, TriageStatus } from '@beacon/domain';
+import type {
+  DocumentKind,
+  FileAttachment,
+  GenerationInput,
+  LabValue,
+  RefillRequest,
+  TriageStatus,
+} from '@beacon/domain';
 import { api } from '@beacon/mock-data';
 
 /* ------------------------------- clinic-wide --------------------------- */
@@ -14,6 +21,8 @@ export const useStaff = () => useQuery({ queryKey: ['staff'], queryFn: api.getSt
 export const useProducts = () => useQuery({ queryKey: ['products'], queryFn: api.getProducts });
 export const useProtocolTemplates = () =>
   useQuery({ queryKey: ['protocolTemplates'], queryFn: api.getProtocolTemplates });
+export const usePeptideLibrary = () =>
+  useQuery({ queryKey: ['peptideLibrary'], queryFn: api.getPeptideLibrary });
 export const usePatients = () => useQuery({ queryKey: ['patients'], queryFn: api.getPatients });
 export const useTriageCases = () =>
   useQuery({ queryKey: ['triage'], queryFn: api.getTriageCases });
@@ -98,5 +107,48 @@ export function useApproveProtocol() {
       void qc.invalidateQueries({ queryKey: ['protocol', patientId] });
       void qc.invalidateQueries({ queryKey: ['patient', patientId] });
     },
+  });
+}
+
+export function useOrderLabPanel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { patientId: string; name: string }) => api.orderLabPanel(input),
+    onSuccess: (_d, vars) => void qc.invalidateQueries({ queryKey: ['labs', vars.patientId] }),
+  });
+}
+
+export function useReleaseLabPanel(patientId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      panelId: string;
+      values?: LabValue[];
+      providerComment?: string;
+      attachment?: FileAttachment;
+    }) => api.releaseLabPanel(input),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['labs', patientId] }),
+  });
+}
+
+export function useAddDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      patientId: string;
+      title: string;
+      kind: DocumentKind;
+      requiresSignature?: boolean;
+      attachment?: FileAttachment;
+    }) => api.addDocument({ source: 'clinic', ...input }),
+    onSuccess: (_d, vars) =>
+      void qc.invalidateQueries({ queryKey: ['documents', vars.patientId] }),
+  });
+}
+
+/** AI protocol generator. Returns the draft; the provider saves it separately. */
+export function useGenerateProtocol() {
+  return useMutation({
+    mutationFn: (input: GenerationInput) => api.generateProtocol(input),
   });
 }

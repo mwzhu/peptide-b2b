@@ -4,7 +4,14 @@
  * REST client replaces later without touching call sites.
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CheckIn, InjectionSite, MessageCategory, SymptomSeverity } from '@beacon/domain';
+import type {
+  CheckIn,
+  DocumentKind,
+  FileAttachment,
+  InjectionSite,
+  MessageCategory,
+  SymptomSeverity,
+} from '@beacon/domain';
 import { api } from '@beacon/mock-data';
 
 export const ME = api.currentPatientId;
@@ -119,6 +126,32 @@ export function useRequestRefill() {
     mutationFn: (input: { productId: string; protocolId: string }) =>
       api.requestRefill({ patientId: ME, ...input }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['refills', ME] }),
+  });
+}
+
+export function useUploadLabResult() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { panelId?: string; name?: string; attachment: FileAttachment }) =>
+      api.uploadLabResult({ patientId: ME, ...input }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['labs', ME] }),
+  });
+}
+
+export function useUploadDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { title: string; kind: DocumentKind; attachment: FileAttachment }) =>
+      api.addDocument({ patientId: ME, source: 'patient', ...input }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['documents', ME] }),
+  });
+}
+
+export function useSignDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (documentId: string) => api.signDocument(documentId),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['documents', ME] }),
   });
 }
 

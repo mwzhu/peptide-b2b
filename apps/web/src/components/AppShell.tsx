@@ -6,20 +6,19 @@ import {
   Compass,
   LayoutDashboard,
   MessageSquare,
-  Package,
   Settings,
   Users,
 } from 'lucide-react';
 import { cn } from '../lib/cn';
 import { Avatar } from './ui';
-import { useClinic, useRefills, useStaff, useThreads } from '../lib/hooks';
+import { useClinic, useStaff, useThreads } from '../lib/hooks';
 
 interface NavItem {
   to: string;
   label: string;
   Icon: typeof LayoutDashboard;
   end?: boolean;
-  badge?: 'refills' | 'messages';
+  badge?: 'messages';
 }
 
 // Triage cases surface inside "Needs attention" on the Dashboard; the standalone
@@ -30,18 +29,15 @@ const NAV: NavItem[] = [
   { to: '/protocols', label: 'Protocols', Icon: ClipboardList },
   { to: '/inventory', label: 'Inventory', Icon: Boxes },
   { to: '/messages', label: 'Messages', Icon: MessageSquare, badge: 'messages' },
-  { to: '/refills', label: 'Refills & Orders', Icon: Package, badge: 'refills' },
   { to: '/settings', label: 'Settings', Icon: Settings },
 ];
 
 export function AppShell() {
   const clinic = useClinic();
   const staff = useStaff();
-  const refills = useRefills();
   const threads = useThreads();
 
   const counts: Record<string, number> = {
-    refills: refills.data?.filter((r) => r.status === 'requested' || r.status === 'under_review').length ?? 0,
     messages: threads.data?.filter((t) => t.unread).length ?? 0,
   };
 
@@ -110,11 +106,6 @@ export function AppShell() {
             <span className="text-ink-muted">· {clinic.data?.locations[0]?.name}</span>
             <ChevronDown size={15} className="text-ink-muted" />
           </button>
-          <div className="flex items-center gap-3">
-            <span className="rounded-full bg-success-soft px-2.5 py-1 text-overline font-semibold uppercase tracking-wide text-green-700">
-              Demo data
-            </span>
-          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto">

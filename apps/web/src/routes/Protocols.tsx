@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ClipboardList, Plus, Search, Users } from 'lucide-react';
+import { ClipboardList, Plus, Search, Sparkles, Users } from 'lucide-react';
 import type { PeptideCategory } from '@beacon/domain';
 import { Badge, Button, Card, Loading, PageHeader, Select } from '../components/ui';
 import { useProducts, useProtocolTemplates } from '../lib/hooks';
@@ -109,9 +109,16 @@ export function Protocols() {
         title="Protocol library"
         subtitle="Protocols"
         actions={
-          <Link to="/protocols/builder">
-            <Button icon={<Plus size={16} />}>New template</Button>
-          </Link>
+          <>
+            <Link to="/protocols/builder">
+              <Button variant="secondary" icon={<Plus size={16} />}>
+                New template
+              </Button>
+            </Link>
+            <Link to="/protocols/generate">
+              <Button icon={<Sparkles size={16} />}>Generate</Button>
+            </Link>
+          </>
         }
       />
 

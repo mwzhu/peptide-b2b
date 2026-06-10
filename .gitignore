@@ -15,3 +15,6 @@ android/
 
 # Vercel
 .vercel/
+
+# Local agent state
+.claude/

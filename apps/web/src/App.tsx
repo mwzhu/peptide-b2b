@@ -8,6 +8,7 @@ import { PatientDetail } from './routes/PatientDetail';
 import { Protocols } from './routes/Protocols';
 import { ProtocolDetail } from './routes/ProtocolDetail';
 import { ProtocolBuilder } from './routes/ProtocolBuilder';
+import { ProtocolGenerator } from './routes/ProtocolGenerator';
 import { Triage } from './routes/Triage';
 import { Refills } from './routes/Refills';
 import { Inventory } from './routes/Inventory';
@@ -25,6 +26,7 @@ export function App() {
             <Route path="patients" element={<Patients />} />
             <Route path="patients/:id" element={<PatientDetail />} />
             <Route path="protocols" element={<Protocols />} />
+            <Route path="protocols/generate" element={<ProtocolGenerator />} />
             <Route path="protocols/builder" element={<ProtocolBuilder />} />
             <Route path="protocols/:id" element={<ProtocolDetail />} />
             <Route path="triage" element={<Triage />} />

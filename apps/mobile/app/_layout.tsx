@@ -52,6 +52,8 @@ export default function RootLayout() {
             <Stack.Screen name="check-in" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="report-symptom" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
             <Stack.Screen name="new-message" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="upload-record" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
+            <Stack.Screen name="sign-document" options={{ presentation: 'modal', animation: 'slide_from_bottom' }} />
           </Stack>
         </QueryProvider>
       </SafeAreaProvider>

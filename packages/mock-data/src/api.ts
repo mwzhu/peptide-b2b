@@ -5,8 +5,14 @@
  */
 import type {
   CheckIn,
+  ClinicDocument,
+  DocumentKind,
   DoseLog,
+  FileAttachment,
+  GenerationInput,
   InjectionSite,
+  LabPanel,
+  LabValue,
   Message,
   MessageCategory,
   RefillRequest,
@@ -15,6 +21,7 @@ import type {
   TriageStatus,
 } from '@beacon/domain';
 import { computeAnalytics, CURRENT_PATIENT_ID, db } from './store';
+import { generateProtocol, getPeptideLibrary } from './ai-generator';
 
 const BASE_LATENCY = 180;
 
@@ -29,6 +36,7 @@ function nextId(prefix: string): string {
 }
 
 const nowIso = () => new Date().toISOString();
+const todayIso = () => new Date().toISOString().slice(0, 10);
 const byId = <T extends { id: string }>(rows: T[], id: string) => rows.find((r) => r.id === id);
 
 /* ------------------------------------------------------------------ */
@@ -43,6 +51,7 @@ export const api = {
   getProducts: () => delay(() => db.products),
   getProduct: (id: string) => delay(() => byId(db.products, id)),
   getProtocolTemplates: () => delay(() => db.protocolTemplates),
+  getPeptideLibrary: () => delay(() => getPeptideLibrary()),
   getEducation: () => delay(() => db.educationArticles),
   getInventory: () => delay(() => db.inventoryLots),
   getOrders: () => delay(() => db.orders),
@@ -271,11 +280,118 @@ export const api = {
       return n;
     }),
 
+  /* ------------------------- labs & documents ----------------------- */
+
+  /**
+   * Patient shares lab results. With `panelId` it fulfills a clinic-requested
+   * panel; without, it files a new outside panel awaiting provider review.
+   */
+  uploadLabResult: (input: { patientId: string; panelId?: string; name?: string; attachment: FileAttachment }) =>
+    delay(() => {
+      if (input.panelId) {
+        const panel = byId(db.labs, input.panelId);
+        if (!panel) throw new Error('Lab panel not found');
+        panel.status = 'resulted';
+        panel.resultedOn = todayIso();
+        panel.attachment = input.attachment;
+        return panel;
+      }
+      const panel: LabPanel = {
+        id: nextId('lab'),
+        patientId: input.patientId,
+        name: input.name?.trim() || 'Outside lab result',
+        status: 'resulted',
+        source: 'patient',
+        orderedOn: todayIso(),
+        resultedOn: todayIso(),
+        values: [],
+        attachment: input.attachment,
+      };
+      db.labs.unshift(panel);
+      return panel;
+    }),
+
+  orderLabPanel: (input: { patientId: string; name: string }) =>
+    delay(() => {
+      const panel: LabPanel = {
+        id: nextId('lab'),
+        patientId: input.patientId,
+        name: input.name.trim(),
+        status: 'ordered',
+        source: 'clinic',
+        orderedOn: todayIso(),
+        values: [],
+      };
+      db.labs.unshift(panel);
+      return panel;
+    }),
+
+  /** Provider review — enter/correct values, attach the lab's file, comment, and release. */
+  releaseLabPanel: (input: {
+    panelId: string;
+    values?: LabValue[];
+    providerComment?: string;
+    attachment?: FileAttachment;
+  }) =>
+    delay(() => {
+      const panel = byId(db.labs, input.panelId);
+      if (!panel) throw new Error('Lab panel not found');
+      if (input.values) panel.values = input.values;
+      if (input.providerComment?.trim()) panel.providerComment = input.providerComment.trim();
+      if (input.attachment) panel.attachment = input.attachment;
+      panel.status = 'released';
+      panel.resultedOn ??= todayIso();
+      return panel;
+    }),
+
+  addDocument: (input: {
+    patientId: string;
+    title: string;
+    kind: DocumentKind;
+    source: 'clinic' | 'patient';
+    requiresSignature?: boolean;
+    attachment?: FileAttachment;
+  }) =>
+    delay(() => {
+      const doc: ClinicDocument = {
+        id: nextId('doc'),
+        patientId: input.patientId,
+        kind: input.kind,
+        title: input.title.trim(),
+        createdAt: nowIso(),
+        source: input.source,
+        requiresSignature: input.requiresSignature ?? false,
+        signed: false,
+        attachment: input.attachment,
+      };
+      db.documents.unshift(doc);
+      return doc;
+    }),
+
+  signDocument: (documentId: string) =>
+    delay(() => {
+      const doc = byId(db.documents, documentId);
+      if (!doc) throw new Error('Document not found');
+      doc.signed = true;
+      doc.signedAt = nowIso();
+      return doc;
+    }),
+
   approveProtocol: (patientId: string) =>
     delay(() => {
       const protocol = db.protocols.find((p) => p.patientId === patientId);
       if (protocol) protocol.status = 'active';
       return protocol;
+    }),
+
+  /**
+   * AI protocol generator. Runs the rule-based engine behind a longer simulated
+   * latency so the UI can show its "thinking" phase. Pure — does not mutate the
+   * store; the provider saves the draft separately.
+   */
+  generateProtocol: (input: GenerationInput) =>
+    new Promise<ReturnType<typeof generateProtocol>>((resolve) => {
+      setTimeout(() => resolve(generateProtocol(input)), 2200 + Math.random() * 900);
     }),
 };
 

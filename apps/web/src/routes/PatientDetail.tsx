@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   Activity,
@@ -10,26 +10,44 @@ import {
   FileText,
   FlaskConical,
   MessageSquare,
+  Paperclip,
   Pencil,
   Pill,
+  Plus,
   Send,
+  ShieldCheck,
+  Sparkles,
   Syringe,
   TrendingDown,
   TriangleAlert,
   User,
+  X,
 } from 'lucide-react';
 import { daysUntil } from '@beacon/calculations';
-import type { DoseStatus, OutcomeSeries } from '@beacon/domain';
+import type {
+  ClinicDocument,
+  DocumentKind,
+  DoseStatus,
+  FileAttachment,
+  LabPanel,
+  LabValue,
+  OutcomeSeries,
+} from '@beacon/domain';
 import {
   Avatar,
   Badge,
   Button,
   Card,
+  Dialog,
+  Field,
+  Input,
   Loading,
   PageHeader,
   ProgressBar,
   SectionTitle,
+  Select,
   Tabs,
+  Textarea,
 } from '../components/ui';
 import { TrendChart } from '../components/Chart';
 import {
@@ -43,17 +61,20 @@ import {
   titleCase,
 } from '../lib/format';
 import {
+  useAddDocument,
   useAppointments,
   useCheckIns,
   useDocuments,
   useDoseLogs,
   useLabs,
   useOccurrences,
+  useOrderLabPanel,
   useOutcomes,
   usePatient,
   usePatientThreads,
   useProducts,
   useProtocol,
+  useReleaseLabPanel,
   useSideEffects,
   useStaff,
   useVials,
@@ -80,8 +101,6 @@ export function PatientDetail() {
   const outcomes = useOutcomes(id);
   const sideEffects = useSideEffects(id);
   const appointments = useAppointments(id);
-  const labs = useLabs(id);
-  const documents = useDocuments(id);
   const threads = usePatientThreads(id);
   const checkIns = useCheckIns(id);
   const products = useProducts();
@@ -128,6 +147,11 @@ export function PatientDetail() {
             <Button variant="secondary" icon={<Send size={15} />}>
               Message
             </Button>
+            <Link to={`/protocols/generate?patient=${p.id}`}>
+              <Button variant="secondary" icon={<Sparkles size={15} />}>
+                Generate protocol
+              </Button>
+            </Link>
             <Button icon={<Pencil size={15} />}>Edit care plan</Button>
           </div>
         </div>
@@ -294,56 +318,7 @@ export function PatientDetail() {
 
           {tab === 'adherence' && <AdherencePanel patientId={id} />}
           {tab === 'outcomes' && <OutcomesPanel series={outcomes.data ?? []} patient={p} />}
-          {tab === 'labs' && (
-            <Card className="p-5">
-              <SectionTitle>Labs</SectionTitle>
-              {labs.data?.map((panel) => (
-                <div key={panel.id} className="mb-4 rounded-xl border border-border p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-ink">{panel.name}</p>
-                      <p className="text-caption text-ink-muted">
-                        {panel.resultedOn ? `Resulted ${formatShortDate(panel.resultedOn)}` : `Ordered ${formatShortDate(panel.orderedOn)}`}
-                      </p>
-                    </div>
-                    <Badge tone={panel.status === 'released' ? 'success' : 'neutral'}>
-                      {titleCase(panel.status)}
-                    </Badge>
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-bodySm">
-                    {panel.values.map((v) => (
-                      <div key={v.name} className="flex items-center justify-between border-b border-border py-1.5 last:border-0">
-                        <span className="text-ink-secondary">{v.name}</span>
-                        <span className={v.flag === 'normal' ? 'text-ink' : 'text-danger'}>
-                          {v.value} {v.unit}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {panel.providerComment && (
-                    <p className="mt-3 rounded-lg bg-surface-sunken p-3 text-bodySm text-ink-secondary">
-                      {panel.providerComment}
-                    </p>
-                  )}
-                </div>
-              ))}
-              <SectionTitle>Documents</SectionTitle>
-              <div className="space-y-2">
-                {documents.data?.map((d) => (
-                  <div key={d.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
-                    <FileText size={18} className="text-primary" />
-                    <div className="flex-1">
-                      <p className="font-semibold text-ink">{d.title}</p>
-                      <p className="text-caption text-ink-muted">
-                        {titleCase(d.kind)} · {formatShortDate(d.createdAt)}
-                      </p>
-                    </div>
-                    <Badge tone={d.signed ? 'success' : 'warning'}>{d.signed ? 'Signed' : 'Awaiting signature'}</Badge>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          )}
+          {tab === 'labs' && <LabsPanel patientId={id} />}
           {tab === 'messages' && (
             <Card className="p-5">
               <SectionTitle>Conversations</SectionTitle>
@@ -405,12 +380,35 @@ export function PatientDetail() {
               <Row label="DOB" value={formatShortDate(p.dateOfBirth)} />
               <Row label="Sex" value={titleCase(p.sex)} />
               <Row label="Height" value={`${Math.round(p.heightCm / 2.54)}″`} />
-              <Row label="Allergies" value={p.allergies.join(', ') || 'None'} />
-              <Row label="Conditions" value={p.conditions.join(', ') || 'None'} />
-              <Row label="Medications" value={p.medications.join(', ') || 'None'} />
               <Row label="Goals" value={p.goals.map(titleCase).join(', ')} />
               <Row label="Churn risk" value={titleCase(p.churnRisk)} />
             </dl>
+          </Card>
+
+          {/* Clinical context — drives the AI protocol safety screen */}
+          <Card className="p-5">
+            <SectionTitle
+              action={
+                <Link
+                  to={`/protocols/generate?patient=${p.id}`}
+                  className="inline-flex items-center gap-1 text-bodySm font-medium text-primary hover:underline"
+                >
+                  <Sparkles size={14} /> Generate
+                </Link>
+              }
+            >
+              <span className="inline-flex items-center gap-2">
+                <ShieldCheck size={17} className="text-primary" /> Clinical context
+              </span>
+            </SectionTitle>
+            <p className="mb-3 text-caption text-ink-muted">
+              Medications, agents, conditions, and allergies the AI generator screens every peptide against.
+            </p>
+            <div className="space-y-3">
+              <ChipRow label="Medications & agents" items={p.medications} />
+              <ChipRow label="Conditions" items={p.conditions} />
+              <ChipRow label="Allergies" items={p.allergies} tone="warning" />
+            </div>
           </Card>
 
           <Card className="p-5">
@@ -486,6 +484,33 @@ function Row({ label, value }: { label: string; value: string }) {
     <div className="flex items-start justify-between gap-3">
       <dt className="text-ink-muted">{label}</dt>
       <dd className="text-right text-ink">{value}</dd>
+    </div>
+  );
+}
+
+function ChipRow({
+  label,
+  items,
+  tone = 'neutral',
+}: {
+  label: string;
+  items: string[];
+  tone?: 'neutral' | 'warning';
+}) {
+  return (
+    <div>
+      <p className="mb-1.5 text-overline font-semibold uppercase tracking-wide text-ink-muted">{label}</p>
+      {items.length === 0 ? (
+        <p className="text-bodySm text-ink-muted">None on file</p>
+      ) : (
+        <div className="flex flex-wrap gap-1.5">
+          {items.map((it) => (
+            <Badge key={it} tone={tone}>
+              {it}
+            </Badge>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -572,5 +597,577 @@ function OutcomesPanel({ series, patient }: { series: OutcomeSeries[]; patient: 
         </Card>
       ))}
     </div>
+  );
+}
+
+/* ------------------------------ Labs & docs ------------------------------ */
+
+const COMMON_PANELS = [
+  'Comprehensive Metabolic Panel',
+  'Lipid Panel',
+  'CBC with Differential',
+  'HbA1c',
+  'Thyroid Panel (TSH, Free T4)',
+  'Testosterone, Total & Free',
+  'IGF-1',
+];
+
+const DOCUMENT_KINDS: { value: DocumentKind; label: string }[] = [
+  { value: 'consent', label: 'Consent form' },
+  { value: 'care_plan', label: 'Care plan' },
+  { value: 'instructions', label: 'Instructions' },
+  { value: 'visit_summary', label: 'Visit summary' },
+  { value: 'other', label: 'Other' },
+];
+
+function LabsPanel({ patientId }: { patientId: string }) {
+  const labs = useLabs(patientId);
+  const documents = useDocuments(patientId);
+  const [orderOpen, setOrderOpen] = useState(false);
+  const [docOpen, setDocOpen] = useState(false);
+  const [reviewPanel, setReviewPanel] = useState<LabPanel | null>(null);
+
+  const needsReview = labs.data?.filter((p) => p.status === 'resulted') ?? [];
+  const openOrders = labs.data?.filter((p) => p.status === 'ordered' || p.status === 'collected') ?? [];
+  const released = labs.data?.filter((p) => p.status === 'released') ?? [];
+
+  return (
+    <>
+      <Card className="p-5">
+        <SectionTitle
+          action={
+            <Button size="sm" variant="secondary" icon={<Plus size={15} />} onClick={() => setOrderOpen(true)}>
+              Order panel
+            </Button>
+          }
+        >
+          Labs
+        </SectionTitle>
+
+        {needsReview.length > 0 && (
+          <div className="mb-5">
+            <p className="mb-2 text-overline font-semibold uppercase tracking-wide text-amber-700">
+              Needs review
+            </p>
+            <div className="space-y-3">
+              {needsReview.map((panel) => (
+                <div key={panel.id} className="rounded-xl border border-warning/50 bg-warning-soft/30 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink">{panel.name}</p>
+                      <p className="text-caption text-ink-muted">
+                        {panel.resultedOn ? `Resulted ${formatShortDate(panel.resultedOn)}` : `Ordered ${formatShortDate(panel.orderedOn)}`}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {panel.source === 'patient' && <Badge tone="accent">Patient upload</Badge>}
+                      <Button size="sm" onClick={() => setReviewPanel(panel)}>
+                        Review &amp; release
+                      </Button>
+                    </div>
+                  </div>
+                  {panel.attachment && <AttachmentLine fileName={panel.attachment.fileName} sizeKb={panel.attachment.sizeKb} />}
+                  <LabValueGrid values={panel.values} />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {openOrders.length > 0 && (
+          <div className="mb-5">
+            <p className="mb-2 text-overline font-semibold uppercase tracking-wide text-ink-muted">
+              Open orders
+            </p>
+            <div className="space-y-2">
+              {openOrders.map((panel) => (
+                <div key={panel.id} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                  <FlaskConical size={18} className="text-primary" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">{panel.name}</p>
+                    <p className="text-caption text-ink-muted">
+                      Ordered {formatShortDate(panel.orderedOn)} · Patient can upload results from the app
+                    </p>
+                  </div>
+                  <Badge>{titleCase(panel.status)}</Badge>
+                  <Button size="sm" variant="ghost" onClick={() => setReviewPanel(panel)}>
+                    Enter results
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {released.map((panel) => (
+          <div key={panel.id} className="mb-4 rounded-xl border border-border p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold text-ink">{panel.name}</p>
+                <p className="text-caption text-ink-muted">
+                  {panel.resultedOn ? `Resulted ${formatShortDate(panel.resultedOn)}` : `Ordered ${formatShortDate(panel.orderedOn)}`}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {panel.source === 'patient' && <Badge tone="accent">Patient upload</Badge>}
+                <Badge tone="success">Released</Badge>
+              </div>
+            </div>
+            {panel.attachment && <AttachmentLine fileName={panel.attachment.fileName} sizeKb={panel.attachment.sizeKb} />}
+            <LabValueGrid values={panel.values} />
+            {panel.providerComment && (
+              <p className="mt-3 rounded-lg bg-surface-sunken p-3 text-bodySm text-ink-secondary">
+                {panel.providerComment}
+              </p>
+            )}
+          </div>
+        ))}
+
+        {labs.data && labs.data.length === 0 && (
+          <p className="py-3 text-bodySm text-ink-muted">
+            No labs yet. Order a panel to get the patient started.
+          </p>
+        )}
+
+        <SectionTitle
+          action={
+            <Button size="sm" variant="secondary" icon={<Plus size={15} />} onClick={() => setDocOpen(true)}>
+              Add document
+            </Button>
+          }
+        >
+          Documents
+        </SectionTitle>
+        <div className="space-y-2">
+          {documents.data?.map((d) => (
+            <DocumentLine key={d.id} doc={d} />
+          ))}
+          {documents.data && documents.data.length === 0 && (
+            <p className="py-3 text-bodySm text-ink-muted">No documents on file.</p>
+          )}
+        </div>
+      </Card>
+
+      <OrderPanelDialog open={orderOpen} onClose={() => setOrderOpen(false)} patientId={patientId} />
+      <AddDocumentDialog open={docOpen} onClose={() => setDocOpen(false)} patientId={patientId} />
+      {reviewPanel && (
+        <ReviewLabDialog
+          patientId={patientId}
+          panel={reviewPanel}
+          onClose={() => setReviewPanel(null)}
+        />
+      )}
+    </>
+  );
+}
+
+function fileSizeLabel(sizeKb?: number): string | null {
+  if (!sizeKb) return null;
+  return sizeKb >= 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`;
+}
+
+function AttachmentLine({ fileName, sizeKb }: { fileName: string; sizeKb?: number }) {
+  const size = fileSizeLabel(sizeKb);
+  return (
+    <p className="mt-2 inline-flex items-center gap-1.5 text-bodySm text-ink-secondary">
+      <Paperclip size={14} className="text-ink-muted" />
+      {fileName}
+      {size ? <span className="text-ink-muted">· {size}</span> : null}
+    </p>
+  );
+}
+
+/**
+ * Provider-side file attach. Like the rest of the prototype it keeps metadata
+ * only (name + size) — no bytes are stored or uploaded anywhere.
+ */
+function FileField({
+  value,
+  onChange,
+  label,
+}: {
+  value: FileAttachment | null;
+  onChange: (file: FileAttachment | null) => void;
+  label: string;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return (
+    <div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="application/pdf,image/*"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onChange({ fileName: f.name, sizeKb: Math.max(1, Math.round(f.size / 1024)) });
+          e.target.value = '';
+        }}
+      />
+      {value ? (
+        <div className="flex items-center gap-2.5 rounded-xl border border-border bg-surface-sunken px-3 py-2.5">
+          <Paperclip size={15} className="shrink-0 text-ink-muted" />
+          <span className="min-w-0 flex-1 truncate text-bodySm text-ink-secondary">
+            {value.fileName}
+            {fileSizeLabel(value.sizeKb) ? (
+              <span className="text-ink-muted"> · {fileSizeLabel(value.sizeKb)}</span>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            onClick={() => onChange(null)}
+            className="shrink-0 text-ink-muted hover:text-ink"
+            aria-label="Remove file"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      ) : (
+        <Button
+          type="button"
+          variant="secondary"
+          icon={<Paperclip size={15} />}
+          onClick={() => inputRef.current?.click()}
+        >
+          {label}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function LabValueGrid({ values }: { values: LabValue[] }) {
+  if (values.length === 0) return null;
+  return (
+    <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 text-bodySm">
+      {values.map((v) => (
+        <div key={v.name} className="flex items-center justify-between border-b border-border py-1.5 last:border-0">
+          <span className="text-ink-secondary">{v.name}</span>
+          <span className={v.flag === 'normal' ? 'text-ink' : 'text-danger'}>
+            {v.value} {v.unit}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function DocumentLine({ doc }: { doc: ClinicDocument }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border border-border p-3">
+      <FileText size={18} className="text-primary" />
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-ink">{doc.title}</p>
+        <p className="truncate text-caption text-ink-muted">
+          {titleCase(doc.kind)} · {formatShortDate(doc.createdAt)}
+          {doc.attachment ? ` · ${doc.attachment.fileName}` : ''}
+        </p>
+      </div>
+      {doc.source === 'patient' && <Badge tone="accent">Patient upload</Badge>}
+      {doc.requiresSignature ? (
+        <Badge tone={doc.signed ? 'success' : 'warning'}>
+          {doc.signed ? 'Signed' : 'Awaiting signature'}
+        </Badge>
+      ) : (
+        <Badge>On file</Badge>
+      )}
+    </div>
+  );
+}
+
+function OrderPanelDialog({
+  open,
+  onClose,
+  patientId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  patientId: string;
+}) {
+  const order = useOrderLabPanel();
+  const [choice, setChoice] = useState(COMMON_PANELS[0]);
+  const [custom, setCustom] = useState('');
+  const name = choice === 'custom' ? custom.trim() : choice;
+
+  const submit = () => {
+    if (!name) return;
+    order.mutate(
+      { patientId, name },
+      {
+        onSuccess: () => {
+          setChoice(COMMON_PANELS[0]);
+          setCustom('');
+          onClose();
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Order lab panel">
+      <div className="space-y-4">
+        <Field label="Panel">
+          <Select value={choice} onChange={(e) => setChoice(e.target.value)}>
+            {COMMON_PANELS.map((p) => (
+              <option key={p} value={p}>
+                {p}
+              </option>
+            ))}
+            <option value="custom">Custom…</option>
+          </Select>
+        </Field>
+        {choice === 'custom' && (
+          <Field label="Panel name">
+            <Input
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              placeholder="e.g. Vitamin D, 25-Hydroxy"
+              autoFocus
+            />
+          </Field>
+        )}
+        <p className="text-bodySm text-ink-muted">
+          The patient sees this under “Requested by your clinic” in the app and can upload
+          their results directly.
+        </p>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!name || order.isPending} onClick={submit}>
+            {order.isPending ? 'Ordering…' : 'Order panel'}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+interface ValueDraft {
+  name: string;
+  value: string;
+  unit: string;
+  refLow: string;
+  refHigh: string;
+}
+
+const EMPTY_DRAFT: ValueDraft = { name: '', value: '', unit: '', refLow: '', refHigh: '' };
+
+function ReviewLabDialog({
+  patientId,
+  panel,
+  onClose,
+}: {
+  patientId: string;
+  panel: LabPanel;
+  onClose: () => void;
+}) {
+  const release = useReleaseLabPanel(patientId);
+  const [rows, setRows] = useState<ValueDraft[]>(
+    panel.values.length > 0
+      ? panel.values.map((v) => ({
+          name: v.name,
+          value: String(v.value),
+          unit: v.unit,
+          refLow: String(v.refLow),
+          refHigh: String(v.refHigh),
+        }))
+      : [{ ...EMPTY_DRAFT }],
+  );
+  const [comment, setComment] = useState(panel.providerComment ?? '');
+  const [file, setFile] = useState<FileAttachment | null>(panel.attachment ?? null);
+
+  const setRow = (idx: number, patch: Partial<ValueDraft>) =>
+    setRows((rs) => rs.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+
+  const parsed: LabValue[] = rows
+    .filter((r) => r.name.trim() && r.value.trim() !== '' && !Number.isNaN(Number(r.value)))
+    .map((r) => {
+      const value = Number(r.value);
+      const refLow = Number(r.refLow) || 0;
+      const refHigh = Number(r.refHigh) || 0;
+      const flag: LabValue['flag'] =
+        refHigh > 0 && value > refHigh ? 'high' : value < refLow ? 'low' : 'normal';
+      return { name: r.name.trim(), value, unit: r.unit.trim(), refLow, refHigh, flag };
+    });
+
+  const canRelease = (parsed.length > 0 || comment.trim().length > 0) && !release.isPending;
+
+  const submit = () =>
+    release.mutate(
+      { panelId: panel.id, values: parsed, providerComment: comment, attachment: file ?? undefined },
+      { onSuccess: onClose },
+    );
+
+  const fromPatient = panel.source === 'patient';
+
+  return (
+    <Dialog open onClose={onClose} title={`Review — ${panel.name}`} width="max-w-2xl">
+      <div className="space-y-4">
+        <Field
+          label="Result file"
+          hint={
+            fromPatient
+              ? 'The patient uploaded this. Transcribe the values below, then release.'
+              : 'Attach the lab’s result PDF (Quest, Labcorp, etc.), then transcribe the values below.'
+          }
+        >
+          <FileField value={file} onChange={setFile} label="Attach result PDF or image" />
+        </Field>
+
+        <div>
+          <div className="mb-1.5 grid grid-cols-[1fr_72px_64px_64px_64px] gap-2 text-caption font-semibold text-ink-muted">
+            <span>Marker</span>
+            <span>Value</span>
+            <span>Unit</span>
+            <span>Ref low</span>
+            <span>Ref high</span>
+          </div>
+          <div className="space-y-2">
+            {rows.map((row, idx) => (
+              <div key={idx} className="grid grid-cols-[1fr_72px_64px_64px_64px] gap-2">
+                <Input
+                  value={row.name}
+                  onChange={(e) => setRow(idx, { name: e.target.value })}
+                  placeholder="e.g. Glucose"
+                />
+                <Input
+                  value={row.value}
+                  onChange={(e) => setRow(idx, { value: e.target.value })}
+                  inputMode="decimal"
+                />
+                <Input value={row.unit} onChange={(e) => setRow(idx, { unit: e.target.value })} />
+                <Input
+                  value={row.refLow}
+                  onChange={(e) => setRow(idx, { refLow: e.target.value })}
+                  inputMode="decimal"
+                />
+                <Input
+                  value={row.refHigh}
+                  onChange={(e) => setRow(idx, { refHigh: e.target.value })}
+                  inputMode="decimal"
+                />
+              </div>
+            ))}
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2"
+            icon={<Plus size={14} />}
+            onClick={() => setRows((rs) => [...rs, { ...EMPTY_DRAFT }])}
+          >
+            Add marker
+          </Button>
+        </div>
+
+        <Field label="Comment for the patient" hint="Shown with the results in the patient app.">
+          <Textarea
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="e.g. Lipids trending the right way — keep the current protocol."
+          />
+        </Field>
+
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!canRelease} onClick={submit}>
+            {release.isPending ? 'Releasing…' : 'Release to patient'}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+function AddDocumentDialog({
+  open,
+  onClose,
+  patientId,
+}: {
+  open: boolean;
+  onClose: () => void;
+  patientId: string;
+}) {
+  const addDocument = useAddDocument();
+  const [title, setTitle] = useState('');
+  const [kind, setKind] = useState<DocumentKind>('consent');
+  const [requiresSignature, setRequiresSignature] = useState(true);
+  const [file, setFile] = useState<FileAttachment | null>(null);
+
+  const pickKind = (value: DocumentKind) => {
+    setKind(value);
+    setRequiresSignature(value === 'consent' || value === 'care_plan');
+  };
+
+  // Attaching a file means this is an existing record being filed, not a form to
+  // generate and e-sign — so default the signature request off.
+  const pickFile = (next: FileAttachment | null) => {
+    setFile(next);
+    if (next) setRequiresSignature(false);
+  };
+
+  const submit = () => {
+    if (!title.trim()) return;
+    addDocument.mutate(
+      { patientId, title: title.trim(), kind, requiresSignature, attachment: file ?? undefined },
+      {
+        onSuccess: () => {
+          setTitle('');
+          pickKind('consent');
+          setFile(null);
+          onClose();
+        },
+      },
+    );
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose} title="Add document">
+      <div className="space-y-4">
+        <Field label="Title">
+          <Input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="e.g. Telehealth Consent"
+            autoFocus
+          />
+        </Field>
+        <Field label="Type">
+          <Select value={kind} onChange={(e) => pickKind(e.target.value as DocumentKind)}>
+            {DOCUMENT_KINDS.map((k) => (
+              <option key={k.value} value={k.value}>
+                {k.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field
+          label="Attach a file (optional)"
+          hint="For external or scanned records — a referral letter, visit summary, or signed paper form."
+        >
+          <FileField value={file} onChange={pickFile} label="Attach a PDF or image" />
+        </Field>
+        <label className="flex items-center gap-2.5 text-bodySm text-ink">
+          <input
+            type="checkbox"
+            checked={requiresSignature}
+            onChange={(e) => setRequiresSignature(e.target.checked)}
+            className="h-4 w-4 accent-primary"
+          />
+          Request the patient’s signature in the app
+        </label>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button disabled={!title.trim() || addDocument.isPending} onClick={submit}>
+            {addDocument.isPending ? 'Adding…' : 'Add document'}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

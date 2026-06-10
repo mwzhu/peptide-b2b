@@ -228,10 +228,6 @@ export interface PatientProtocol {
   notes: string;
 }
 
-/* ------------------------------------------------------------------ */
-/* Doses & schedule                                                    */
-/* ------------------------------------------------------------------ */
-
 export type InjectionSite =
   | 'abdomen_left'
   | 'abdomen_right'
@@ -392,18 +388,34 @@ export interface LabValue {
   flag: 'low' | 'normal' | 'high';
 }
 
+/** Uploaded file metadata. The prototype stores no bytes — name and size only. */
+export interface FileAttachment {
+  fileName: string;
+  sizeKb?: number;
+}
+
 export interface LabPanel {
   id: Id;
   patientId: Id;
   name: string;
   status: LabStatus;
+  /** Who supplied the results — clinic-ordered draw vs. patient upload. */
+  source?: 'clinic' | 'patient';
   orderedOn: ISODate;
   resultedOn?: ISODate;
   values: LabValue[];
   providerComment?: string;
+  attachment?: FileAttachment;
 }
 
-export type DocumentKind = 'consent' | 'care_plan' | 'lab' | 'visit_summary' | 'instructions';
+export type DocumentKind =
+  | 'consent'
+  | 'care_plan'
+  | 'lab'
+  | 'prescription'
+  | 'visit_summary'
+  | 'instructions'
+  | 'other';
 
 export interface ClinicDocument {
   id: Id;
@@ -411,8 +423,12 @@ export interface ClinicDocument {
   kind: DocumentKind;
   title: string;
   createdAt: ISODateTime;
+  source?: 'clinic' | 'patient';
+  /** Only clinic-issued forms (consents, care plans) collect a signature. */
+  requiresSignature?: boolean;
   signed: boolean;
   signedAt?: ISODateTime;
+  attachment?: FileAttachment;
 }
 
 /* ------------------------------------------------------------------ */
@@ -617,4 +633,172 @@ export interface AnalyticsSnapshot {
   revenueTrend: MetricPoint[];
   protocolPopularity: { name: string; count: number }[];
   sideEffectFrequency: { type: string; count: number }[];
+}
+
+/* ------------------------------------------------------------------ */
+/* Peptide library & interactions                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * How two peptides relate when stacked. Ordered worst→best for sorting:
+ * `incompatible` is a hard avoid, `neutral`/`compatible` are fine to combine,
+ * `complementary` actively reinforce each other.
+ */
+export type InteractionCompatibility =
+  | 'incompatible'
+  | 'neutral'
+  | 'compatible'
+  | 'complementary';
+
+/** One directed interaction note from the reference library. */
+export interface PeptideInteraction {
+  /** Display name of the other peptide. */
+  withName: string;
+  /** Catalog product id of the other peptide, when it maps to one we carry. */
+  withProductId?: Id;
+  compatibility: InteractionCompatibility;
+  description: string;
+}
+
+/**
+ * Six normalized 0–100 affinities a peptide has for each broad goal area.
+ * Sourced from the reference library; the generator ranks candidates with these.
+ */
+export interface PurposeWeights {
+  brain_mood: number;
+  health_wellness: number;
+  beauty_antiaging: number;
+  weight_metabolic: number;
+  performance_muscle: number;
+  recovery_longevity: number;
+}
+
+/** A reference-library record layered on top of a catalog {@link PeptideProduct}. */
+export interface PeptideLibraryEntry {
+  productId: Id;
+  name: string;
+  /** Free-text guidance on when/how to time the dose (fasted, pre-bed, etc.). */
+  timingGuidance: string;
+  /** Elimination half-life in hours; drives stack-spacing hints. null if unknown. */
+  halfLifeHours: number | null;
+  purposeTags: string[];
+  purposeWeights: PurposeWeights;
+  interactions: PeptideInteraction[];
+}
+
+/* ------------------------------------------------------------------ */
+/* AI protocol generator                                               */
+/* ------------------------------------------------------------------ */
+
+/** The goal areas a provider can target in the generator intake. */
+export type ProtocolGoal =
+  | 'weight_loss'
+  | 'recovery'
+  | 'sleep'
+  | 'libido'
+  | 'performance'
+  | 'skin'
+  | 'inflammation'
+  | 'longevity'
+  | 'cognitive'
+  | 'immune';
+
+/**
+ * Everything the provider feeds the generator. Patient clinical context
+ * (medications, supplements, conditions, allergies) drives the safety screen.
+ */
+export interface GenerationInput {
+  patientId?: Id;
+  goals: ProtocolGoal[];
+  /** Free-text symptoms / needs, e.g. "wants to lose weight and sleep better". */
+  symptoms: string;
+  medications: string[];
+  supplements: string[];
+  conditions: string[];
+  allergies: string[];
+  /** Provider knobs that shape the output. */
+  preferences: {
+    /** Cap the number of peptides in the stack. */
+    maxStackSize: number;
+    /** Bias toward fewer needles / simpler routines. */
+    injectionAverse: boolean;
+    /** Only include well-studied peptides. */
+    conservativeOnly: boolean;
+  };
+}
+
+export type SafetySeverity = 'info' | 'caution' | 'warning';
+
+/** A screen hit from a patient's meds/conditions against a proposed peptide. */
+export interface SafetyFlag {
+  severity: SafetySeverity;
+  /** Short headline, e.g. "Overlaps with semaglutide". */
+  title: string;
+  detail: string;
+  /** Which input tripped it (a medication, condition, allergy…). */
+  source: string;
+  /** Catalog product id this flag concerns, if peptide-specific. */
+  productId?: Id;
+}
+
+/** One peptide line the generator proposes, with its reasoning. */
+export interface GeneratedStackItem {
+  productId: Id;
+  name: string;
+  /** 0–100 fit score for this patient's goals. */
+  matchScore: number;
+  /** Goal(s) this item primarily addresses. */
+  addresses: ProtocolGoal[];
+  /** Plain-language reason this peptide was chosen. */
+  rationale: string;
+  dose: DoseAmount;
+  frequency: Frequency;
+  route: Route;
+  /** When in the day to dose, e.g. "Before bed". */
+  timeOfDay: string;
+  timingGuidance: string;
+  titration: TitrationStep[];
+  /** Other catalog peptides that could swap in for this slot. */
+  alternatives: { productId: Id; name: string; reason: string }[];
+}
+
+/** A pairwise relationship between two items in the generated stack. */
+export interface StackInteraction {
+  aProductId: Id;
+  bProductId: Id;
+  aName: string;
+  bName: string;
+  compatibility: InteractionCompatibility;
+  description: string;
+}
+
+/** One row of the day's dosing timeline. */
+export interface ScheduleSlot {
+  /** e.g. "Morning (fasted)", "Before bed". */
+  label: string;
+  /** Sort key, minutes from midnight. */
+  minutes: number;
+  items: { productId: Id; name: string; dose: DoseAmount }[];
+  /** Spacing/timing note, e.g. "Separate from BPC-157 by 2+ hours". */
+  note?: string;
+}
+
+/** The full generated draft the review screen renders. */
+export interface GeneratedProtocol {
+  id: Id;
+  input: GenerationInput;
+  name: string;
+  summary: string;
+  /** 0–100 overall confidence the generator reports. */
+  confidence: number;
+  durationWeeks: number;
+  items: GeneratedStackItem[];
+  interactions: StackInteraction[];
+  schedule: ScheduleSlot[];
+  safetyFlags: SafetyFlag[];
+  monitoring: string[];
+  suggestedLabs: string[];
+  /** Items the generator considered but excluded, with why. */
+  excluded: { name: string; reason: string }[];
+  generatedAt: ISODateTime;
 }
